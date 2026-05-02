@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  pr-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: pr-agent
+    restart: unless-stopped
+    networks:
+      - coolify
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pr-agent.rule=Host(`press.advancedmarketing.co`)"
+      - "traefik.http.routers.pr-agent.tls=true"
+      - "traefik.http.routers.pr-agent.tls.certresolver=letsencrypt"
+      - "traefik.http.services.pr-agent.loadbalancer.server.port=80"
+
+networks:
+  coolify:
+    external: true

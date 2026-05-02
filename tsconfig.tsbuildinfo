@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/types.ts","./src/components/footer.tsx","./src/components/navbar.tsx","./src/context/appcontext.tsx","./src/hooks/usexaivoice.ts","./src/lib/utils.ts","./src/lib/xai.ts","./src/pages/chatpage.tsx","./src/pages/landingpage.tsx"],"version":"5.6.3"}
