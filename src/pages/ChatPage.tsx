@@ -195,9 +195,21 @@ export default function ChatPage() {
         }
 
         const history = messages.filter((m) => !m.isLoading).slice(-8).map((m) => ({ role: m.role, text: m.text }));
-        const result = await discoveryChat(history, userMsg, websiteData);
+        const result = await discoveryChat(history, userMsg, websiteData, clientProfile);
 
-        if (result.extractedProfile) updateClientProfile(result.extractedProfile);
+        if (result.extractedProfile) {
+          const merged: Partial<ClientProfile> = {};
+          for (const [key, value] of Object.entries(result.extractedProfile)) {
+            const k = key as keyof ClientProfile;
+            // Only overwrite if the new value is non-empty OR the old value is empty
+            if (value && String(value).trim().length > 0) {
+              merged[k] = value as string;
+            } else if (!clientProfile[k] || String(clientProfile[k]).trim().length === 0) {
+              merged[k] = value as string;
+            }
+          }
+          updateClientProfile(merged);
+        }
         setLoading(false);
 
         if (voiceEnabled) voice.speak(result.response.replace(/\*\*/g, '').replace(/_/g, ''));

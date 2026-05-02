@@ -67,22 +67,31 @@ export async function discoveryChat(
   history: { role: string; text: string }[],
   message: string,
   website?: { title: string; description: string; content: string },
+  currentProfile?: Partial<ClientProfile>,
 ): Promise<{ response: string; profileComplete: boolean; extractedProfile?: Partial<ClientProfile> }> {
   const historyText = history.slice(-8).map((h) => `${h.role}: ${h.text}`).join('\n');
 
   const websiteSection = website?.content
-    ? `\n\nWEBSITE CONTENT:\nTitle: ${website.title}\nDescription: ${website.description}\nContent excerpt: ${website.content.substring(0, 1500)}\n`
+    ? `\n\nWEBSITE CONTENT (already browsed):\nTitle: ${website.title}\nDescription: ${website.description}\nContent excerpt: ${website.content.substring(0, 1500)}\n`
+    : '';
+
+  const knownSection = currentProfile
+    ? `\n\nALREADY KNOWN (do NOT ask for these again):\n${Object.entries(currentProfile).filter(([,v]) => v).map(([k,v]) => `- ${k}: ${v}`).join('\n')}\n`
     : '';
 
   const system = `You are a senior PR strategist having a warm conversation with a client. Ask 1-2 questions at a time. Keep responses to 3-4 sentences. Be curious and professional.
 
 Gather: website, product, industry, target audience, goals, unique selling points, tone.
 
-When you have enough info, set profileComplete=true and extract all fields.
+CRITICAL RULES:
+1. If WEBSITE CONTENT is provided below, you ALREADY KNOW the website. Do NOT ask for it again.
+2. If ALREADY KNOWN fields are listed below, do NOT ask for those again.
+3. Only ask for MISSING information.
+4. When you have enough info, set profileComplete=true and extract ALL fields.
 
 Respond ONLY with JSON: {"response":"...","profileComplete":false,"extractedProfile":{"websiteUrl":"","productDescription":"","industry":"","targetAudience":"","goals":"","uniqueSellingPoints":"","keyMessages":"","tone":""}}`;
 
-  const userPrompt = `CONVERSATION:\n${historyText}\n\nCLIENT: "${message}"${websiteSection}\n\nContinue. Return ONLY JSON.`;
+  const userPrompt = `CONVERSATION:\n${historyText}${knownSection}\n\nCLIENT: "${message}"${websiteSection}\n\nContinue. Return ONLY JSON.`;
 
   try {
     const text = await callXAI(system, userPrompt, 0.7, 2048);
