@@ -1,19 +1,24 @@
-# Build stage
-FROM node:20-alpine AS builder
-
+# Build frontend
+FROM node:20-alpine AS frontend-builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
-
 COPY . .
 RUN npm run build
 
-# Serve stage
-FROM nginx:alpine
+# Production image
+FROM node:20-alpine
+RUN apk add --no-cache python3 make g++
 
-COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev
 
-EXPOSE 80
+COPY server ./server
+COPY --from=frontend-builder /app/dist ./server/public
 
-CMD ["nginx", "-g", "daemon off;"]
+ENV NODE_ENV=production
+ENV PORT=3000
+EXPOSE 3000
+
+CMD ["node", "server/index.js"]

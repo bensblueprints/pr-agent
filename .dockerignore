@@ -1,5 +1,6 @@
 node_modules
 dist
-.git
 .env
-*.md
+*.local
+.DS_Store
+data/*.db

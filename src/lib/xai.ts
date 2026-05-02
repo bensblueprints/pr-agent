@@ -1,11 +1,17 @@
 import type { Publication, ClientProfile, PubRecommendation } from '@/types';
 
-const API_BASE = 'https://api.x.ai/v1/chat/completions';
+const PROXY_BASE = '/api/chat/completions';
 
-async function callXAI(apiKey: string, system: string, user: string, temp = 0.5, maxTokens = 4096): Promise<string> {
-  const response = await fetch(API_BASE, {
+function getAuthToken(): string {
+  const token = localStorage.getItem('pr_agent_token');
+  if (!token) throw new Error('Not authenticated');
+  return token;
+}
+
+async function callXAI(system: string, user: string, temp = 0.5, maxTokens = 4096): Promise<string> {
+  const response = await fetch(PROXY_BASE, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${getAuthToken()}` },
     body: JSON.stringify({
       model: 'grok-4',
       messages: [{ role: 'system', content: system }, { role: 'user', content: user }],
@@ -58,7 +64,6 @@ export async function browseWebsite(url: string): Promise<{ title: string; descr
 // ─── Discovery Chat ──────────────────────────────────────────
 
 export async function discoveryChat(
-  apiKey: string,
   history: { role: string; text: string }[],
   message: string,
   website?: { title: string; description: string; content: string },
@@ -80,7 +85,7 @@ Respond ONLY with JSON: {"response":"...","profileComplete":false,"extractedProf
   const userPrompt = `CONVERSATION:\n${historyText}\n\nCLIENT: "${message}"${websiteSection}\n\nContinue. Return ONLY JSON.`;
 
   try {
-    const text = await callXAI(apiKey, system, userPrompt, 0.7, 2048);
+    const text = await callXAI(system, userPrompt, 0.7, 2048);
     const match = text.match(/```json\s*([\s\S]*?)```/) || text.match(/```\s*([\s\S]*?)```/) || [null, text];
     const jsonStr = (match[1] || text).trim();
     const result = JSON.parse(jsonStr);
@@ -183,7 +188,6 @@ function filterPubs(message: string, pubs: Publication[]): Publication[] {
 }
 
 export async function getRecommendations(
-  apiKey: string,
   profile: ClientProfile,
   message: string,
   pubs: Publication[],
@@ -216,7 +220,7 @@ REQUEST: "${message}"
 Pick the best 4-8 publications. Return ONLY JSON.`;
 
   try {
-    const text = await callXAI(apiKey, system, userPrompt, 0.4, 4096);
+    const text = await callXAI(system, userPrompt, 0.4, 4096);
     const match = text.match(/```json\s*([\s\S]*?)```/) || text.match(/```\s*([\s\S]*?)```/) || [null, text];
     const result = JSON.parse((match[1] || text).trim());
 
@@ -261,7 +265,6 @@ Pick the best 4-8 publications. Return ONLY JSON.`;
 // ─── Article Crafting Chat ─────────────────────────────────────
 
 export async function articleCraftingChat(
-  apiKey: string,
   profile: ClientProfile,
   selectedPubs: Publication[],
   history: { role: string; text: string }[],
@@ -286,7 +289,7 @@ CLIENT: "${message}"
 Continue. Return ONLY JSON.`;
 
   try {
-    const text = await callXAI(apiKey, system, userPrompt, 0.6, 2048);
+    const text = await callXAI(system, userPrompt, 0.6, 2048);
     const match = text.match(/```json\s*([\s\S]*?)```/) || text.match(/```\s*([\s\S]*?)```/) || [null, text];
     const result = JSON.parse((match[1] || text).trim());
     return {
@@ -302,7 +305,6 @@ Continue. Return ONLY JSON.`;
 // ─── Article Generation (one at a time) ────────────────────────
 
 export async function generateArticle(
-  apiKey: string,
   profile: ClientProfile,
   pub: Publication,
   brief?: { angles: string; milestones: string; quotes: string; cta: string; avoid: string },
@@ -332,7 +334,7 @@ ${briefText}
 Write a complete, ready-to-publish article with headline. Return ONLY JSON: {"headline":"...","article":"full article text"}`;
 
   try {
-    const text = await callXAI(apiKey, system, userPrompt, 0.8, 4096);
+    const text = await callXAI(system, userPrompt, 0.8, 4096);
     const match = text.match(/```json\s*([\s\S]*?)```/) || text.match(/```\s*([\s\S]*?)```/) || [null, text];
     const result = JSON.parse((match[1] || text).trim());
 
@@ -352,7 +354,6 @@ Write a complete, ready-to-publish article with headline. Return ONLY JSON: {"he
 }
 
 export async function generateArticles(
-  apiKey: string,
   profile: ClientProfile,
   selectedPubs: Publication[],
   brief?: { angles: string; milestones: string; quotes: string; cta: string; avoid: string },
@@ -360,7 +361,7 @@ export async function generateArticles(
   const results: { pubName: string; genre: string; article: string }[] = [];
 
   for (const pub of selectedPubs) {
-    const result = await generateArticle(apiKey, profile, pub, brief);
+    const result = await generateArticle(profile, pub, brief);
     if (result) results.push(result);
   }
 

@@ -7,6 +7,13 @@ services:
       dockerfile: Dockerfile
     container_name: pr-agent
     restart: unless-stopped
+    environment:
+      - XAI_API_KEY=${XAI_API_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+      - DEFAULT_ADMIN_EMAIL=${DEFAULT_ADMIN_EMAIL}
+      - PORT=3000
+    volumes:
+      - pr-agent-data:/app/data
     networks:
       - coolify
     labels:
@@ -18,7 +25,10 @@ services:
       - "traefik.http.routers.pr-agent.entrypoints=https"
       - "traefik.http.routers.pr-agent.tls=true"
       - "traefik.http.routers.pr-agent.tls.certresolver=letsencrypt"
-      - "traefik.http.services.pr-agent.loadbalancer.server.port=80"
+      - "traefik.http.services.pr-agent.loadbalancer.server.port=3000"
+
+volumes:
+  pr-agent-data:
 
 networks:
   coolify:

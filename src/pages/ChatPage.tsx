@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Send, Key, Bot, User, Loader2, DollarSign, Check,
+  Send, Bot, User, Loader2, DollarSign, Check,
   Mic, MicOff, Volume2, VolumeX, PenTool, X,
   Edit3, FileCheck, CheckCircle, Printer, Receipt, Radio,
   Sparkles, Target, Users, ArrowRight, Lightbulb, Globe,
@@ -98,7 +98,7 @@ function RecCard({ rec, isSelected, onToggle }: { rec: PubRecommendation; isSele
 
 export default function ChatPage() {
   const {
-    apiKey, setApiKey, messages, addMessage, setLoading, clearChat,
+    messages, addMessage, setLoading, clearChat,
     phase, setPhase, clientProfile, updateClientProfile,
     recommendedPubs, setRecommendedPubs, selectedPubs, togglePubSelection,
     articles, setArticles, updateArticle, updateArticleNotes, submitForApproval, approveArticle,
@@ -108,11 +108,9 @@ export default function ChatPage() {
   const voice = useXAiVoice();
 
   const [input, setInput] = useState('');
-  const [showKeyModal, setShowKeyModal] = useState(false);
-  const [keyInput, setKeyInput] = useState('');
   const [error, setError] = useState('');
   const [publications, setPublications] = useState<Publication[]>([]);
-  const [voiceEnabled, setVoiceEnabled] = useState(false);
+  const [voiceEnabled] = useState(true);
   const [craftingMessages, setCraftingMessages] = useState<{ role: string; text: string }[]>([]);
   const [articleBrief, setArticleBrief] = useState<{ angles: string; milestones: string; quotes: string; cta: string; avoid: string } | undefined>();
   const [articleLoading, setArticleLoading] = useState(false);
@@ -128,20 +126,17 @@ export default function ChatPage() {
   const isProcessingRef = useRef(false);
 
   useEffect(() => {
-    fetch('./data/publications.json')
+    fetch('/api/publications')
       .then((r) => r.json())
       .then((d: Publication[]) => setPublications(d))
       .catch(() => setError('Failed to load publications'));
   }, []);
 
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }); }, [messages, articles, recommendedPubs]);
-  useEffect(() => { if (!apiKey) setShowKeyModal(true); }, [apiKey]);
-
+  // Voice uses browser fallback only (xAI WebSocket requires API key on client)
   useEffect(() => {
-    if (apiKey && !showKeyModal && !voice.isConnected && !voice.isConnecting) {
-      voice.connect(apiKey).then(() => setVoiceEnabled(true)).catch(() => setVoiceEnabled(true));
-    }
-  }, [apiKey, showKeyModal]);
+    // Browser voice is enabled by default; xAI native voice is disabled
+  }, []);
 
   useEffect(() => {
     if ((voice.isConnected || voice.useFallback) && !hasGreeted.current && phase === 'discovery') {
@@ -168,7 +163,7 @@ export default function ChatPage() {
   const handleSend = useCallback(async (text?: string) => {
     if (isProcessingRef.current) return;
     const msgText = text || input;
-    if (!msgText.trim() || !apiKey) return;
+    if (!msgText.trim()) return;
 
     isProcessingRef.current = true;
     setInput('');
@@ -200,7 +195,7 @@ export default function ChatPage() {
         }
 
         const history = messages.filter((m) => !m.isLoading).slice(-8).map((m) => ({ role: m.role, text: m.text }));
-        const result = await discoveryChat(apiKey, history, userMsg, websiteData);
+        const result = await discoveryChat(history, userMsg, websiteData);
 
         if (result.extractedProfile) updateClientProfile(result.extractedProfile);
         setLoading(false);
@@ -230,7 +225,7 @@ export default function ChatPage() {
       if (phase === 'crafting') {
         const history = [...craftingMessages, { role: 'user', text: userMsg }];
         setCraftingMessages(history);
-        const result = await articleCraftingChat(apiKey, clientProfile, selectedPubs, history, userMsg);
+        const result = await articleCraftingChat(clientProfile, selectedPubs, history, userMsg);
         if (result.articleBrief) setArticleBrief(result.articleBrief);
         setLoading(false);
 
@@ -258,13 +253,13 @@ export default function ChatPage() {
       addMessage({ role: 'ai', text: 'Sorry, something went wrong: ' + (err.message || 'Please try again.') });
     }
     isProcessingRef.current = false;
-  }, [apiKey, phase, input, messages, clientProfile, selectedPubs, craftingMessages, voiceEnabled, voice, updateClientProfile, addMessage, setLoading, setPhase]);
+  }, [phase, input, messages, clientProfile, selectedPubs, craftingMessages, voiceEnabled, voice, updateClientProfile, addMessage, setLoading, setPhase]);
 
   const runRecommendation = async (userMsg: string, profile?: Partial<ClientProfile>) => {
     setLoading(true);
     try {
       const effectiveProfile = profile ? { ...clientProfile, ...profile } : clientProfile;
-      const result = await getRecommendations(apiKey, effectiveProfile, userMsg, publications);
+      const result = await getRecommendations(effectiveProfile, userMsg, publications);
       setRecommendedPubs(result.recommendations);
       setLoading(false);
 
@@ -288,7 +283,7 @@ export default function ChatPage() {
     setArticleLoading(true);
     setError('');
     try {
-      const result = await generateArticles(apiKey, clientProfile, selectedPubs, articleBrief);
+      const result = await generateArticles(clientProfile, selectedPubs, articleBrief);
 
       if (!result.articles.length) {
         setError('Article generation failed. Please try again or check your API key.');
@@ -327,7 +322,7 @@ export default function ChatPage() {
 
   const toggleMic = () => {
     if (voice.isListening) voice.stopListening();
-    else { setInput(''); voice.startListening(); setVoiceEnabled(true); }
+    else { setInput(''); voice.startListening(); }
   };
 
   const handleSpeak = (text: string, idx: number) => {
@@ -340,19 +335,12 @@ export default function ChatPage() {
     }
   };
 
-  const saveKey = () => {
-    if (keyInput.trim().length < 10) return;
-    setApiKey(keyInput.trim());
-    setShowKeyModal(false);
-    setKeyInput('');
-  };
-
   const startArticleCrafting = () => {
     if (selectedPubs.length === 0) return;
     setCraftingMessages([]);
     setPhase('crafting');
     setLoading(true);
-    articleCraftingChat(apiKey, clientProfile, selectedPubs, [], "Let's plan the articles for my campaign.").then((result) => {
+    articleCraftingChat(clientProfile, selectedPubs, [], "Let's plan the articles for my campaign.").then((result) => {
       setCraftingMessages([{ role: 'ai', text: result.response }]);
       if (result.articleBrief) setArticleBrief(result.articleBrief);
       setLoading(false);
@@ -557,8 +545,8 @@ export default function ChatPage() {
             </button>
             <textarea value={voice.isListening ? (voice.transcript || 'Listening...') : input} onChange={(e) => !voice.isListening && setInput(e.target.value)} onKeyDown={handleKeydown}
               placeholder={phase === 'discovery' ? 'Tell me about your business or share your website...' : phase === 'crafting' ? 'Share angles, quotes, or preferences...' : 'Type your message...'}
-              disabled={!apiKey || voice.isListening} className="flex-1 px-4 py-2.5 rounded-xl bg-muted border border-border focus:border-primary focus:outline-none text-sm resize-none min-h-[40px] max-h-[120px] disabled:opacity-50" rows={1} />
-            <button onClick={sendMessage} disabled={(!input.trim() && !voice.transcript.trim()) || !apiKey || voice.isListening}
+              disabled={voice.isListening} className="flex-1 px-4 py-2.5 rounded-xl bg-muted border border-border focus:border-primary focus:outline-none text-sm resize-none min-h-[40px] max-h-[120px] disabled:opacity-50" rows={1} />
+            <button onClick={sendMessage} disabled={(!input.trim() && !voice.transcript.trim()) || voice.isListening}
               className="flex-shrink-0 w-10 h-10 rounded-xl bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/90 disabled:opacity-50 transition-colors"><Send className="w-4 h-4" /></button>
             <button onClick={clearChat} className="flex-shrink-0 w-10 h-10 rounded-xl bg-muted border border-border flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"><X className="w-4 h-4" /></button>
           </div>
@@ -566,41 +554,6 @@ export default function ChatPage() {
           {voice.useFallback && !voice.isConnected && <p className="text-center text-xs text-amber-500/60 mt-1">Browser voice mode (tap mic to retry xAI)</p>}
         </div>
       )}
-
-      {/* API Key Modal */}
-      <AnimatePresence>
-        {showKeyModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center px-4" onClick={() => { if (apiKey) setShowKeyModal(false); }}>
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} onClick={(e) => e.stopPropagation()} className="bg-card border border-border rounded-2xl p-6 max-w-md w-full shadow-2xl">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Key className="w-5 h-5 text-primary" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold">Enter xAI API Key</h3>
-                  <p className="text-xs text-muted-foreground">Your key is stored locally in your browser.</p>
-                </div>
-              </div>
-              <div className="space-y-3">
-                <input
-                  type="password"
-                  value={keyInput}
-                  onChange={(e) => setKeyInput(e.target.value)}
-                  placeholder="xai-..."
-                  className="w-full px-4 py-2.5 rounded-xl bg-muted border border-border focus:border-primary focus:outline-none text-sm"
-                />
-                <button
-                  onClick={saveKey}
-                  disabled={keyInput.trim().length < 10}
-                  className="w-full px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50"
-                >
-                  Save API Key
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Invoice Modal */}
       <AnimatePresence>
