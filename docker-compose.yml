@@ -11,7 +11,11 @@ services:
       - coolify
     labels:
       - "traefik.enable=true"
+      - "traefik.http.routers.pr-agent-http.rule=Host(`press.advancedmarketing.co`)"
+      - "traefik.http.routers.pr-agent-http.entrypoints=http"
+      - "traefik.http.routers.pr-agent-http.middlewares=redirect-to-https"
       - "traefik.http.routers.pr-agent.rule=Host(`press.advancedmarketing.co`)"
+      - "traefik.http.routers.pr-agent.entrypoints=https"
       - "traefik.http.routers.pr-agent.tls=true"
       - "traefik.http.routers.pr-agent.tls.certresolver=letsencrypt"
       - "traefik.http.services.pr-agent.loadbalancer.server.port=80"
